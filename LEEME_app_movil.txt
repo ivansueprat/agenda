@@ -1,0 +1,33 @@
+MI CRM - APP DEL MOVIL (Android)
+================================
+
+Es una pagina web instalable (PWA). El codigo no contiene NINGUN dato de clientes: los datos viven solo
+en tu telefono y en tu carpeta de Google Drive.
+
+1) SUBIRLA A GITHUB PAGES (una sola vez, gratis)
+   a. En github.com: "New repository". Nombre neutro, por ejemplo "agenda". Publico (Pages gratis lo exige).
+   b. En el repositorio: "Add file" > "Upload files". Arrastra TODOS los archivos de esta carpeta
+      (index.html, app.js, style.css, sw.js, manifest.webmanifest y los 3 iconos .png). "Commit changes".
+   c. "Settings" > "Pages" > Source: "Deploy from a branch", Branch: main, carpeta /(root) > Save.
+   d. A los 1-2 minutos aparece la direccion: https://TU_USUARIO.github.io/agenda/
+
+2) INSTALARLA EN EL MOVIL
+   Abre esa direccion en Chrome del Android > menu (tres puntos) > "Instalar aplicacion" / "Anadir a pantalla
+   de inicio". Queda con su icono y abre sin barra del navegador y sin cobertura.
+
+3) USO DIARIO (semiautomatico)
+   - En el PC: abre Mi CRM. Se deja preparado para_movil.json en la carpeta de Drive (Ajustes > Carpeta de
+     intercambio). Espera a que Drive lo suba (tic verde).
+   - En el movil: Sincronizar > "Cargar datos del PC" > elige para_movil.json en Drive.
+   - Durante el dia: Hoy > cliente > llamar / como llegar / Registrar visita / Nota; Tareas; ofertas a seguir.
+     Todo se guarda en el movil al instante, aunque no haya cobertura.
+   - Al terminar: Sincronizar > "Enviar al PC" > Drive > carpeta MiCRM_movil.
+   - En el PC: al abrir Mi CRM (o en Exportar > Movil > "Importar lo del movil") entra todo. Despues el PC
+     genera datos nuevos y, al cargarlos en el movil, desaparecen de su lista los cambios ya recogidos.
+
+AVISOS
+   - Trabaja en un solo sitio a la vez: si registras visitas en el movil, importalas en el PC antes de
+     tocar esas mismas visitas alli.
+   - Si cambias de movil o borras los datos del navegador, se pierde lo que no hayas enviado.
+   - Para actualizar la app: sube los archivos nuevos al repositorio (mismos nombres). El movil la actualiza
+     al abrirla dos veces.
