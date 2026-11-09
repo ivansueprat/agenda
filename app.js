@@ -1,6 +1,6 @@
 'use strict';
 /* Mi CRM (móvil). Los datos viven solo en este teléfono. El código de esta página no contiene ningún dato. */
-const VERSION_APP = '1.0.0';
+const VERSION_APP = '1.1.0';
 const K_PKG = 'micrm_pkg', K_LOG = 'micrm_log', K_META = 'micrm_meta';
 
 /* ---------- utilidades ---------- */
@@ -40,6 +40,7 @@ function etiquetaDia(s) {
   const d = parse(s), n = DIAS[d.getDay()];
   return n[0].toUpperCase() + n.slice(1) + ' ' + d.getDate() + '/' + (d.getMonth() + 1);
 }
+const num = v => Number(v).toLocaleString('es-ES', { maximumFractionDigits: 2 });
 const euros = v => (v == null || v === '' ? '' : Number(v).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' }));
 const sinAcentos = t => (t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const digitos = t => (t || '').replace(/[^\d+]/g, '');
@@ -69,17 +70,28 @@ function escribir(clave, valor) {
   }
 }
 function cargarTodo() { PKG = leer(K_PKG, null); LOG = leer(K_LOG, []); META = leer(K_META, {}); reindexar(); }
+const idDe = t => (/^\d+$/.test(t) ? Number(t) : t);
+const refDe = id => (typeof id === 'string' ? { cliente_ref: id.slice(2) } : { cliente_id: id });
+const claveDe = c => (c.cliente_ref ? 'n:' + c.cliente_ref : c.cliente_id);
+function clienteLocal(c) {
+  const k = c.contacto && c.contacto.nombre ? [{ nombre: c.contacto.nombre, cargo: c.contacto.cargo || '', telefono: '', email: '', principal: true }] : [];
+  return { id: 'n:' + c.uid, local: true, nombre: c.nombre, numero: '', estado: 'potencial', clasificacion: '', poblacion: c.poblacion || '',
+    zona: '', direccion: c.direccion || '', telefono: c.telefono || '', email: '', notas: '', dia_visita: '', origen: 'Móvil',
+    frecuencia_dias: null, contactos: k, ultimas: c.resumen ? [{ fecha: c.fecha, contacto: k.length ? k[0].nombre : '', resumen: c.resumen }] : [],
+    ofertas: [], tareas: [] };
+}
 function reindexar() {
   CM = new Map();
-  if (!PKG) return;
-  for (const i of PKG.indice || []) CM.set(i.id, Object.assign({ reducida: true }, i));
-  for (const c of PKG.clientes || []) CM.set(c.id, c);
+  for (const i of (PKG && PKG.indice) || []) CM.set(i.id, Object.assign({ reducida: true }, i));
+  for (const c of (PKG && PKG.clientes) || []) CM.set(c.id, c);
+  for (const c of LOG) if (c.tipo === 'cliente_nuevo') CM.set('n:' + c.uid, clienteLocal(c));
 }
 function anotar(cambio) {
   LOG.push(Object.assign({ uid: uuid(), creado: new Date().toISOString() }, cambio));
+  reindexar();
   return escribir(K_LOG, LOG);
 }
-function quitarCambio(uid) { LOG = LOG.filter(c => c.uid !== uid); escribir(K_LOG, LOG); }
+function quitarCambio(uid) { LOG = LOG.filter(c => c.uid !== uid); reindexar(); escribir(K_LOG, LOG); }
 
 /* ---------- lo que ya está hecho en el móvil (se superpone a los datos del PC) ---------- */
 const visitaHecha = v => LOG.some(c => c.tipo === 'visita' && (c.visita_id === v.id || (c.cliente_id === v.cliente_id && c.fecha === v.fecha)));
@@ -88,11 +100,11 @@ const seguimientoHecho = id => LOG.some(c => c.tipo === 'seguimiento_oferta' && 
 function tareasLocales(clienteId) {
   const out = [];
   for (const c of LOG) {
-    if (c.tipo === 'tarea_nueva' && (clienteId == null || c.cliente_id === clienteId))
-      out.push({ local: true, descripcion: c.descripcion, fecha_limite: c.fecha_limite, prioridad: c.prioridad, cliente_id: c.cliente_id });
-    if (c.tipo === 'visita' && (clienteId == null || c.cliente_id === clienteId))
+    if (c.tipo === 'tarea_nueva' && (clienteId == null || claveDe(c) === clienteId))
+      out.push({ local: true, descripcion: c.descripcion, fecha_limite: c.fecha_limite, prioridad: c.prioridad, cliente_id: claveDe(c) });
+    if (c.tipo === 'visita' && (clienteId == null || claveDe(c) === clienteId))
       for (const t of c.tareas || [])
-        out.push({ local: true, descripcion: t.descripcion, fecha_limite: t.fecha_limite, prioridad: t.prioridad, cliente_id: c.cliente_id });
+        out.push({ local: true, descripcion: t.descripcion, fecha_limite: t.fecha_limite, prioridad: t.prioridad, cliente_id: claveDe(c) });
   }
   return out;
 }
@@ -177,13 +189,13 @@ function pClientes() {
     const q = sinAcentos(caja.value.trim());
     busqueda = caja.value;
     const ok = q ? todos.filter(c => sinAcentos(c.nombre + ' ' + c.numero + ' ' + c.poblacion).includes(q)) : todos;
-    res.replaceChildren(h('h2', null, ok.length + ' cliente' + (ok.length === 1 ? '' : 's') + (ok.length > 60 ? ' (primeros 60)' : '')),
-      ok.length ? lista(ok.slice(0, 60).map(c => filaCliente(c, [c.numero, c.poblacion].filter(Boolean).join(' · '), '#/cliente/' + c.id)))
+    res.replaceChildren(h('h2', null, ok.length + ' cliente' + (ok.length === 1 ? '' : 's')),
+      ok.length ? lista(ok.map(c => filaCliente(c, [c.numero, c.poblacion].filter(Boolean).join(' · '), '#/cliente/' + c.id)))
         : vacio('🔍', 'Nada con ese texto.'));
   }
   caja.addEventListener('input', pintar);
   pintar();
-  return [caja, res];
+  return [h('a', { class: 'boton primario', style: 'width:100%;margin-bottom:10px', href: '#/cliente-nuevo' }, '＋ Nuevo cliente'), caja, res];
 }
 
 function datoFila(k, v, enlace) {
@@ -206,9 +218,12 @@ function pCliente(id, params) {
       h('h3', { style: 'margin:0;font-size:1.15rem' }, c.nombre), insignia(c)),
     h('div', { class: 'sub' }, [c.numero ? 'Nº ' + c.numero : 'Potencial', c.poblacion].filter(Boolean).join(' · ')),
     h('div', { class: 'acciones' }, acciones)));
-  if (c.reducida) out.push(aviso('Ficha reducida: este cliente no estaba en la agenda de los próximos días. Puedes llamarle y registrar visita; el detalle completo está en el PC.'));
+  if (c.local) out.push(aviso('Cliente creado en el móvil. Aparecerá en el PC cuando envíes los cambios y lo importes.', 'bien'));
+  if (c.reducida) out.push(aviso('Ficha reducida (datos antiguos). Vuelve a cargar los datos del PC para ver la ficha completa.'));
   else {
-    const datos = [datoFila('Dirección', c.direccion), datoFila('Zona', c.zona),
+    const datos = [datoFila('Dirección', c.direccion), datoFila('Población', c.poblacion), datoFila('Zona', c.zona),
+      datoFila('Día de visita', c.dia_visita), datoFila('Origen', c.origen),
+      datoFila('Frecuencia', c.frecuencia_dias ? 'cada ' + c.frecuencia_dias + ' días' : ''),
       datoFila('Teléfono', c.telefono, c.telefono ? 'tel:' + digitos(c.telefono) : null),
       datoFila('Email', c.email, c.email ? 'mailto:' + c.email : null)].filter(Boolean);
     if (datos.length) out.push(h('div', { class: 'tarjeta' }, datos));
@@ -224,11 +239,11 @@ function pCliente(id, params) {
   const ofs = (c.ofertas || []).filter(o => !seguimientoHecho(o.id));
   if (ofs.length) out.push(h('h2', null, 'Ofertas abiertas'), lista(ofs.map(o => h('a', { class: 'fila', href: '#/oferta/' + o.id },
     h('div', { class: 'principal' }, h('b', null, 'Oferta ' + o.numero + ' · ' + euros(o.total)),
-      h('span', { class: 'sub' }, fmt(o.fecha) + (o.proximo_seguimiento ? ' · seguir ' + fmt(o.proximo_seguimiento) : '')))))));
+      h('span', { class: 'sub' }, fmt(o.fecha) + ((o.lineas || []).length ? ' · ' + o.lineas.length + ' artículos' : '') + (o.proximo_seguimiento ? ' · seguir ' + fmt(o.proximo_seguimiento) : '')))))));
   if ((c.ultimas || []).length) out.push(h('h2', null, 'Últimas visitas'), lista(c.ultimas.map(u => h('div', { class: 'fila' },
     h('div', { class: 'principal' }, h('b', null, fmt(u.fecha) + (u.contacto ? ' · ' + u.contacto : '')),
       h('span', { class: 'notas' }, u.resumen || '(sin resumen)'))))));
-  const locNotas = LOG.filter(x => x.tipo === 'nota' && x.cliente_id === id);
+  const locNotas = LOG.filter(x => x.tipo === 'nota' && claveDe(x) === id);
   if (c.notas || locNotas.length) out.push(h('h2', null, 'Notas'), h('div', { class: 'tarjeta notas' },
     [c.notas, ...locNotas.map(n => '[' + fmt(n.fecha) + ' móvil, pendiente de enviar] ' + n.texto)].filter(Boolean).join('\n')));
   return out;
@@ -241,9 +256,9 @@ function pVisita(id, params) {
   const contactos = c.contactos || [];
   const fecha = h('input', { type: 'date', value: hoy() });
   const sel = h('select', null, h('option', { value: '' }, '— Sin contacto concreto —'),
-    contactos.map(k => h('option', { value: k.id }, k.nombre + (k.cargo ? ' (' + k.cargo + ')' : ''))),
+    contactos.filter(k => k.id != null).map(k => h('option', { value: k.id }, k.nombre + (k.cargo ? ' (' + k.cargo + ')' : ''))),
     h('option', { value: 'nuevo' }, '＋ Contacto nuevo…'));
-  const principal = contactos.find(k => k.principal);
+  const principal = contactos.find(k => k.principal && k.id != null);
   if (principal) sel.value = String(principal.id);
   const nNombre = h('input', { placeholder: 'Nombre' }), nCargo = h('input', { placeholder: 'Cargo' }), nTel = h('input', { type: 'tel', placeholder: 'Teléfono' });
   const nuevo = h('div', { style: 'display:none' }, h('div', { class: 'dos', style: 'margin-top:8px' }, nNombre, nCargo), h('div', { style: 'margin-top:8px' }, nTel));
@@ -267,7 +282,7 @@ function pVisita(id, params) {
   function guardar() {
     if (!fecha.value) return toast('Falta la fecha', true);
     if (!resumen.value.trim()) return toast('Escribe un resumen, aunque sea corto', true);
-    const cambio = { tipo: 'visita', cliente_id: id, visita_id: vid, fecha: fecha.value, resumen: resumen.value.trim() };
+    const cambio = Object.assign({ tipo: 'visita', visita_id: vid }, refDe(id), { fecha: fecha.value, resumen: resumen.value.trim() });
     if (sel.value === 'nuevo') {
       if (!nNombre.value.trim()) return toast('Falta el nombre del contacto nuevo', true);
       cambio.contacto_nuevo = { nombre: nNombre.value.trim(), cargo: nCargo.value.trim(), telefono: nTel.value.trim() };
@@ -305,30 +320,77 @@ function pNota(id) {
   return [h('div', { class: 'tarjeta' }, h('b', null, c.nombre), h('label', null, 'Nota'), t,
     h('button', { class: 'primario', style: 'width:100%;margin-top:14px', onclick: () => {
       if (!t.value.trim()) return toast('La nota está vacía', true);
-      if (anotar({ tipo: 'nota', cliente_id: id, fecha: hoy(), texto: t.value.trim() })) { toast('Nota guardada ✓'); history.back(); }
+      if (anotar(Object.assign({ tipo: 'nota', fecha: hoy(), texto: t.value.trim() }, refDe(id)))) { toast('Nota guardada ✓'); history.back(); }
     } }, 'Guardar nota'))];
 }
 
+function lineasOferta(o) {
+  const ls = o.lineas || [];
+  if (!ls.length) return [h('h2', null, 'Artículos'), h('div', { class: 'tarjeta sub' }, 'Esta oferta no tiene líneas guardadas en el PC.')];
+  return [h('h2', null, 'Artículos (' + ls.length + ')'), lista(ls.map(l => h('div', { class: 'fila' },
+    h('div', { class: 'principal' }, h('b', null, l.desc || l.ref),
+      h('span', { class: 'sub' }, [l.ref, num(l.cant) + ' × ' + euros(l.precio) + (l.dto ? ' (−' + num(l.dto) + '%)' : '')].filter(Boolean).join(' · '))),
+    h('span', { style: 'white-space:nowrap;font-weight:600' }, euros(l.importe)))))];
+}
 function pOferta(id) {
   const o = (PKG.ofertas_seguir || []).find(x => x.id === id)
     || [...CM.values()].flatMap(c => (c.ofertas || []).map(x => Object.assign({ cliente_id: c.id }, x))).find(x => x.id === id);
   if (!o) return [vacio('❓', 'Oferta no encontrada.')];
   const nota = h('textarea', { placeholder: 'Qué ha dicho el cliente de la oferta…' }), prox = h('input', { type: 'date' });
   const atajo = (txt, fn) => h('button', { type: 'button', class: 'ficha-chip', onclick: () => { prox.value = fn(hoy()); } }, txt);
+  const tel = o.cliente_id && CM.get(o.cliente_id) && CM.get(o.cliente_id).telefono;
+  const antes = o.seguimientos || [];
   return [h('div', { class: 'tarjeta' },
     h('b', null, 'Oferta ' + o.numero + ' · ' + (o.cliente || nombreCliente(o.cliente_id))),
     h('div', { class: 'sub' }, [euros(o.total), fmt(o.fecha)].filter(Boolean).join(' · ')),
     o.notas ? h('p', { class: 'notas sub' }, o.notas) : null,
-    o.cliente_id && CM.get(o.cliente_id) && CM.get(o.cliente_id).telefono
-      ? h('div', { class: 'acciones' }, h('a', { class: 'boton', href: 'tel:' + digitos(CM.get(o.cliente_id).telefono) }, '📞 Llamar')) : null,
-    h('label', null, 'Resultado del seguimiento'), nota,
-    h('label', null, 'Próximo seguimiento'), prox,
-    h('div', { class: 'fichas' }, atajo('1 semana', f => sumarDias(f, 7)), atajo('2 semanas', f => sumarDias(f, 14)), atajo('1 mes', f => sumarMeses(f, 1))),
-    h('button', { class: 'primario', style: 'width:100%;margin-top:16px', onclick: () => {
-      if (anotar({ tipo: 'seguimiento_oferta', oferta_id: id, fecha: hoy(), nota: nota.value.trim(), proximo: prox.value || null })) {
-        toast('Seguimiento guardado ✓'); location.hash = '#/';
-      }
-    } }, 'Guardar seguimiento'))];
+    tel ? h('div', { class: 'acciones' }, h('a', { class: 'boton', href: 'tel:' + digitos(tel) }, '📞 Llamar')) : null,
+    antes.length ? h('div', { class: 'sub', style: 'margin-top:8px' }, 'Seguimientos anteriores: ' + antes.map(g => fmt(g.fecha) + (g.nota ? ' (' + g.nota + ')' : '')).join(' · ')) : null),
+    lineasOferta(o),
+    h('h2', null, 'Seguimiento'),
+    h('div', { class: 'tarjeta' },
+      h('label', { style: 'margin-top:0' }, 'Resultado del seguimiento'), nota,
+      h('label', null, 'Próximo seguimiento'), prox,
+      h('div', { class: 'fichas' }, atajo('1 semana', f => sumarDias(f, 7)), atajo('2 semanas', f => sumarDias(f, 14)), atajo('1 mes', f => sumarMeses(f, 1))),
+      h('button', { class: 'primario', style: 'width:100%;margin-top:16px', onclick: () => {
+        if (anotar({ tipo: 'seguimiento_oferta', oferta_id: id, fecha: hoy(), nota: nota.value.trim(), proximo: prox.value || null })) {
+          toast('Seguimiento guardado ✓'); location.hash = '#/';
+        }
+      } }, 'Guardar seguimiento'))];
+}
+
+function pClienteNuevo() {
+  const nombre = h('input', { placeholder: 'Nombre del negocio', autocomplete: 'off' });
+  const dir = h('input', { placeholder: 'Calle y número' });
+  const pobs = [...new Set([...CM.values()].map(c => c.poblacion).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+  const pob = h('input', { placeholder: 'Población', list: 'pobs', autocomplete: 'off' });
+  const tel = h('input', { type: 'tel', placeholder: 'Teléfono del negocio' });
+  const cNom = h('input', { placeholder: 'Nombre del contacto' }), cCar = h('input', { placeholder: 'Cargo' });
+  const resumen = h('textarea', { placeholder: 'Qué se ha hablado, qué necesita…' });
+  const prox = h('input', { type: 'date' });
+  const atajo = (txt, fn) => h('button', { type: 'button', class: 'ficha-chip', onclick: () => { prox.value = fn(hoy()); } }, txt);
+  const btn = h('button', { class: 'primario', style: 'width:100%;margin-top:18px', onclick: () => {
+    const n = nombre.value.trim();
+    if (!n) return toast('Falta el nombre', true);
+    const dup = [...CM.values()].find(c => sinAcentos(c.nombre) === sinAcentos(n) && sinAcentos(c.poblacion) === sinAcentos(pob.value.trim()));
+    if (dup) return toast('Ya existe «' + dup.nombre + '» en esa población. Búscalo en Clientes.', true);
+    const cambio = { tipo: 'cliente_nuevo', nombre: n, direccion: dir.value.trim(), poblacion: pob.value.trim(), telefono: tel.value.trim(), fecha: hoy(),
+      resumen: resumen.value.trim() };
+    if (cNom.value.trim()) cambio.contacto = { nombre: cNom.value.trim(), cargo: cCar.value.trim() };
+    if (prox.value) cambio.proxima = prox.value;
+    btn.disabled = true;
+    if (!anotar(cambio)) { btn.disabled = false; return; }
+    toast('Cliente guardado ✓');
+    location.hash = '#/cliente/n:' + LOG[LOG.length - 1].uid;
+  } }, 'Guardar cliente');
+  return [h('div', { class: 'tarjeta' }, h('datalist', { id: 'pobs' }, pobs.map(p => h('option', { value: p }))),
+    h('label', { style: 'margin-top:0' }, 'Nombre *'), nombre, h('label', null, 'Dirección'), dir, h('label', null, 'Población'), pob,
+    h('label', null, 'Teléfono'), tel),
+  h('div', { class: 'tarjeta' }, h('h3', null, 'Contacto'), cNom, h('div', { style: 'margin-top:8px' }, cCar)),
+  h('div', { class: 'tarjeta' }, h('h3', null, 'Resumen de la visita'), resumen),
+  h('div', { class: 'tarjeta' }, h('h3', null, 'Próxima visita (opcional)'), prox,
+    h('div', { class: 'fichas' }, atajo('1 semana', f => sumarDias(f, 7)), atajo('1 mes', f => sumarMeses(f, 1)), atajo('3 meses', f => sumarMeses(f, 3)))),
+  btn];
 }
 
 function pTareas() {
@@ -348,17 +410,17 @@ function pTareas() {
 }
 
 function pTareaNueva(params) {
-  const cid = params.get('c') ? Number(params.get('c')) : null;
+  const cid = params.get('c') ? idDe(params.get('c')) : null;
   const desc = h('input', { placeholder: 'Qué hay que hacer' }), f = h('input', { type: 'date' });
   const p = h('select', null, h('option', { value: 'normal' }, 'Normal'), h('option', { value: 'alta' }, 'Alta'), h('option', { value: 'baja' }, 'Baja'));
   const cli = h('select', null, h('option', { value: '' }, '— Sin cliente —'),
-    [...CM.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).map(c => h('option', { value: c.id }, c.nombre + (c.poblacion ? ' · ' + c.poblacion : ''))));
-  if (cid) cli.value = String(cid);
+    [...CM.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).map(c => h('option', { value: String(c.id) }, c.nombre + (c.poblacion ? ' · ' + c.poblacion : ''))));
+  if (cid != null) cli.value = String(cid);
   return [h('div', { class: 'tarjeta' }, h('label', null, 'Tarea'), desc, h('label', null, 'Cliente'), cli,
     h('div', { class: 'dos' }, h('div', null, h('label', null, 'Para el día'), f), h('div', null, h('label', null, 'Prioridad'), p)),
     h('button', { class: 'primario', style: 'width:100%;margin-top:16px', onclick: () => {
       if (!desc.value.trim()) return toast('Falta la descripción', true);
-      if (anotar({ tipo: 'tarea_nueva', cliente_id: cli.value ? Number(cli.value) : null, descripcion: desc.value.trim(), fecha_limite: f.value || null, prioridad: p.value })) {
+      if (anotar(Object.assign({ tipo: 'tarea_nueva', descripcion: desc.value.trim(), fecha_limite: f.value || null, prioridad: p.value }, cli.value ? refDe(idDe(cli.value)) : { cliente_id: null }))) {
         toast('Tarea guardada ✓'); location.hash = '#/tareas';
       }
     } }, 'Guardar tarea'))];
@@ -367,10 +429,11 @@ function pTareaNueva(params) {
 /* ---------- sincronizar ---------- */
 function descCambio(c) {
   const t = {
-    visita: () => 'Visita · ' + nombreCliente(c.cliente_id) + ' · ' + fmt(c.fecha),
+    visita: () => 'Visita · ' + nombreCliente(claveDe(c)) + ' · ' + fmt(c.fecha),
+    cliente_nuevo: () => 'Cliente nuevo · ' + c.nombre,
     tarea_hecha: () => 'Tarea hecha · ' + (((PKG && PKG.tareas) || []).find(x => x.id === c.tarea_id) || { descripcion: '#' + c.tarea_id }).descripcion,
     tarea_nueva: () => 'Tarea nueva · ' + c.descripcion,
-    nota: () => 'Nota · ' + nombreCliente(c.cliente_id),
+    nota: () => 'Nota · ' + nombreCliente(claveDe(c)),
     seguimiento_oferta: () => 'Seguimiento de oferta #' + c.oferta_id
   }[c.tipo];
   return t ? t() : c.tipo;
@@ -386,6 +449,8 @@ function cargarArchivo(file) {
     if (PKG && d.generado < PKG.generado && !confirm('Este archivo es más antiguo (' + fmt(d.generado) + ') que el que ya tienes (' + fmt(PKG.generado) + '). ¿Cargarlo igualmente?')) return;
     const importados = new Set(d.importados || []);
     const antes = LOG.length;
+    const mapa = d.clientes_nuevos || {};
+    for (const c of LOG) if (c.cliente_ref && mapa[c.cliente_ref]) { c.cliente_id = mapa[c.cliente_ref]; delete c.cliente_ref; }
     LOG = LOG.filter(c => !importados.has(c.uid));
     PKG = d;
     if (!escribir(K_PKG, PKG) || !escribir(K_LOG, LOG)) return;
@@ -396,26 +461,34 @@ function cargarArchivo(file) {
   };
   lector.readAsText(file);
 }
+let diagEnvio = '';
 async function enviarAlPC() {
   if (!LOG.length) return toast('No hay nada que enviar');
   const ahora = new Date();
   const base = 'desde_movil_' + iso(ahora) + '_' + pad(ahora.getHours()) + pad(ahora.getMinutes());
   const texto = JSON.stringify({ version: 1, generado: ahora.toISOString(), cambios: LOG });
+  const diag = ['compartir ' + (navigator.share ? 'existe' : 'NO existe'), 'canShare ' + (navigator.canShare ? 'existe' : 'NO existe')];
   if (navigator.canShare && navigator.share) {
-    for (const [ext, tipo] of [['json', 'application/json'], ['txt', 'text/plain']]) {
-      const f = new File([texto], base + '.' + ext, { type: tipo });
-      if (!navigator.canShare({ files: [f] })) continue;
+    for (const [ext, tipo] of [['txt', 'text/plain'], ['json', 'application/json']]) {
+      let f, puede = false;
+      try { f = new File([texto], base + '.' + ext, { type: tipo }); puede = navigator.canShare({ files: [f] }); } catch (e) { diag.push(ext + ' canShare error ' + e.name); }
+      diag.push('.' + ext + (puede ? ' admitido' : ' no admitido'));
+      if (!puede) continue;
       try {
-        await navigator.share({ files: [f], title: 'Datos del CRM' });
-        META.envio = ahora.toISOString(); escribir(K_META, META); render(true);
+        await navigator.share({ files: [f] });
+        diagEnvio = ''; META.envio = ahora.toISOString(); escribir(K_META, META); render(true);
         return;
-      } catch (e) { if (e.name === 'AbortError') return; }
+      } catch (e) {
+        if (e.name === 'AbortError') return;
+        diag.push('.' + ext + ' error ' + e.name + ': ' + String(e.message).slice(0, 80));
+      }
     }
   }
+  diagEnvio = diag.join(' · ');
   const a = h('a', { href: URL.createObjectURL(new Blob([texto], { type: 'application/json' })), download: base + '.json' });
   document.body.append(a); a.click(); a.remove();
   META.envio = ahora.toISOString(); escribir(K_META, META);
-  toast('Archivo guardado en Descargas. Súbelo a la carpeta de Drive.');
+  toast('No se pudo abrir «compartir»: archivo guardado en Descargas', true);
   render(true);
 }
 function pSync() {
@@ -427,6 +500,7 @@ function pSync() {
       : h('p', { class: 'sub', style: 'margin:0 0 6px' }, 'Aún no has cargado nada.'),
     h('p', { style: 'margin:0 0 10px;font-size:.92rem' }, 'Pulsa y elige el archivo ', h('b', null, 'para_movil.json'), ' de la carpeta de Drive.'),
     h('button', { class: 'primario', style: 'width:100%', onclick: () => entrada.click() }, '📥 Cargar datos del PC'), entrada));
+  if (diagEnvio) out.push(aviso('No se pudo abrir el menú de compartir y el archivo se guardó en Descargas. Detalle para el desarrollador: ' + diagEnvio, 'mal'));
   out.push(h('div', { class: 'tarjeta' }, h('h3', null, '2 · Enviar al PC (' + LOG.length + ' cambio' + (LOG.length === 1 ? '' : 's') + ')'),
     LOG.length ? h('p', { class: 'sub', style: 'margin:0 0 10px' }, 'Elige «Drive» al compartir y guárdalo en la carpeta MiCRM_movil.')
       : h('p', { class: 'sub', style: 'margin:0' }, 'No hay cambios pendientes.'),
@@ -457,7 +531,7 @@ const PESTANAS = [['', '📅', 'Hoy'], ['clientes', '👥', 'Clientes'], ['tarea
 function render(conservar) {
   const y = window.scrollY;
   const { partes, params } = rutaActual();
-  const id = partes[1] ? Number(partes[1]) : null;
+  const id = partes[1] ? idDe(decodeURIComponent(partes[1])) : null;
   let titulo = 'Mi CRM', cuerpo, atras = true;
   switch (partes[0]) {
     case undefined: titulo = 'Hoy'; cuerpo = pHoy(); atras = false; break;
@@ -468,6 +542,7 @@ function render(conservar) {
     case 'visita': titulo = 'Registrar visita'; cuerpo = pVisita(id, params); break;
     case 'nota': titulo = 'Nueva nota'; cuerpo = pNota(id); break;
     case 'oferta': titulo = 'Seguimiento de oferta'; cuerpo = PKG ? pOferta(id) : []; break;
+    case 'cliente-nuevo': titulo = 'Nuevo cliente'; cuerpo = pClienteNuevo(); break;
     case 'tarea': titulo = 'Nueva tarea'; cuerpo = pTareaNueva(params); break;
     default: location.hash = '#/'; return;
   }
@@ -476,7 +551,7 @@ function render(conservar) {
     atras ? h('button', { class: 'atras', 'aria-label': 'Volver', onclick: () => (history.length > 1 ? history.back() : (location.hash = '#/')) }, '‹') : null,
     h('h1', null, titulo),
     partes[0] === undefined ? h('span', { class: 'fecha' }, DIAS[new Date().getDay()] + ' ' + new Date().getDate() + '/' + (new Date().getMonth() + 1)) : null].filter(Boolean));
-  document.getElementById('app').replaceChildren(...[].concat(cuerpo));
+  document.getElementById('app').replaceChildren(...[cuerpo].flat(Infinity).filter(Boolean));
   const activa = ['', 'clientes', 'tareas', 'sync'].includes(partes[0] || '') ? (partes[0] || '') : (partes[0] === 'cliente' ? 'clientes' : '');
   document.getElementById('nav').replaceChildren(...PESTANAS.map(([r, ico, txt]) =>
     h('a', { href: '#/' + r, class: r === activa ? 'on' : '' }, h('span', null, ico), txt,

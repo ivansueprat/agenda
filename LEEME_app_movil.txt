@@ -25,6 +25,14 @@ en tu telefono y en tu carpeta de Google Drive.
    - En el PC: al abrir Mi CRM (o en Exportar > Movil > "Importar lo del movil") entra todo. Despues el PC
      genera datos nuevos y, al cargarlos en el movil, desaparecen de su lista los cambios ya recogidos.
 
+NOVEDADES DE LA VERSION 1.1
+   - Clientes: lista completa, ficha completa de todos, boton "Nuevo cliente" (nombre, direccion, poblacion,
+     telefono, contacto, resumen y proxima visita).
+   - Ofertas: al hacer el seguimiento se ven los articulos y los seguimientos anteriores.
+   - Si "Enviar al PC" no puede abrir el menu de compartir, la pantalla Sincronizar explica el motivo.
+   - Para ver las novedades: sube los archivos nuevos a GitHub, abre la app dos veces y, en el PC,
+     pulsa "Preparar datos para el movil" y vuelve a cargar los datos en el movil.
+
 AVISOS
    - Trabaja en un solo sitio a la vez: si registras visitas en el movil, importalas en el PC antes de
      tocar esas mismas visitas alli.
