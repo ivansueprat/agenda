@@ -1,5 +1,5 @@
 // Guarda la aplicación en el móvil para que abra sin cobertura. Nunca guarda datos de clientes.
-const V = 'micrm-movil-1.1.0';
+const V = 'micrm-movil-1.2.0';
 const FILES = ['./', 'index.html', 'app.js', 'style.css', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(V).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));

@@ -1,6 +1,6 @@
 'use strict';
 /* Mi CRM (móvil). Los datos viven solo en este teléfono. El código de esta página no contiene ningún dato. */
-const VERSION_APP = '1.1.0';
+const VERSION_APP = '1.2.0';
 const K_PKG = 'micrm_pkg', K_LOG = 'micrm_log', K_META = 'micrm_meta';
 
 /* ---------- utilidades ---------- */
@@ -221,7 +221,9 @@ function pCliente(id, params) {
   if (c.local) out.push(aviso('Cliente creado en el móvil. Aparecerá en el PC cuando envíes los cambios y lo importes.', 'bien'));
   if (c.reducida) out.push(aviso('Ficha reducida (datos antiguos). Vuelve a cargar los datos del PC para ver la ficha completa.'));
   else {
-    const datos = [datoFila('Dirección', c.direccion), datoFila('Población', c.poblacion), datoFila('Zona', c.zona),
+    const otras = (c.delegaciones || []).join(', ');
+    const datos = [datoFila('Delegación de', c.delegacion_de), datoFila(c.delegacion_de ? 'Otras delegaciones' : 'Delegaciones', otras),
+      datoFila('Dirección', c.direccion), datoFila('Población', c.poblacion), datoFila('Zona', c.zona),
       datoFila('Día de visita', c.dia_visita), datoFila('Origen', c.origen),
       datoFila('Frecuencia', c.frecuencia_dias ? 'cada ' + c.frecuencia_dias + ' días' : ''),
       datoFila('Teléfono', c.telefono, c.telefono ? 'tel:' + digitos(c.telefono) : null),

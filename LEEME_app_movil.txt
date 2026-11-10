@@ -25,6 +25,9 @@ en tu telefono y en tu carpeta de Google Drive.
    - En el PC: al abrir Mi CRM (o en Exportar > Movil > "Importar lo del movil") entra todo. Despues el PC
      genera datos nuevos y, al cargarlos en el movil, desaparecen de su lista los cambios ya recogidos.
 
+NOVEDADES DE LA VERSION 1.2
+   - La ficha muestra si el cliente es delegacion de otro y sus otras delegaciones.
+
 NOVEDADES DE LA VERSION 1.1
    - Clientes: lista completa, ficha completa de todos, boton "Nuevo cliente" (nombre, direccion, poblacion,
      telefono, contacto, resumen y proxima visita).
